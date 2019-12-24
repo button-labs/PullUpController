@@ -8,7 +8,7 @@
 
 import UIKit
 
-open class PullUpController: UIViewController {
+open class PullUpController: UIViewController, UIGestureRecognizerDelegate {
     
     public enum Action {
         /**
@@ -250,16 +250,22 @@ open class PullUpController: UIViewController {
     
     fileprivate func removeInternalScrollViewPanGestureRecognizer() {
         internalScrollView?.panGestureRecognizer.removeTarget(self, action: #selector(handleScrollViewGestureRecognizer(_:)))
+        internalScrollView?.panGestureRecognizer.delegate = self
     }
     
     private func setupPanGestureRecognizer() {
         addInternalScrollViewPanGesture()
         panGestureRecognizer = UIPanGestureRecognizer(target: self, action: #selector(handlePanGestureRecognizer(_:)))
+        panGestureRecognizer?.delegate = self
         panGestureRecognizer?.minimumNumberOfTouches = 1
         panGestureRecognizer?.maximumNumberOfTouches = 1
         if let panGestureRecognizer = panGestureRecognizer {
             view.addGestureRecognizer(panGestureRecognizer)
         }
+    }
+    
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
     }
     
     private func setupConstraints() {
@@ -367,8 +373,10 @@ open class PullUpController: UIViewController {
         
         switch gestureRecognizer.state {
         case .changed:
-            setTopOffset(topConstraint.constant + yTranslation, allowBounce: true)
-            gestureRecognizer.setTranslation(.zero, in: view)
+            if yTranslation < 0 || shouldAllowDragDown  {
+                setTopOffset(topConstraint.constant + yTranslation, allowBounce: true)
+                gestureRecognizer.setTranslation(.zero, in: view)
+            }
             
         case .ended:
             goToNearestStickyPoint(verticalVelocity: gestureRecognizer.velocity(in: view).y)
@@ -376,6 +384,10 @@ open class PullUpController: UIViewController {
         default:
             break
         }
+    }
+    
+    open var shouldAllowDragDown: Bool {
+        return true
     }
     
     private func goToNearestStickyPoint(verticalVelocity: CGFloat) {
@@ -482,17 +494,13 @@ extension UIViewController {
         assert(!(self is UITableViewController), "It's not possible to attach a PullUpController to a UITableViewController. Check this issue for more information: https://github.com/MarioIannotta/PullUpController/issues/14")
         addChild(pullUpController)
         pullUpController.setup(superview: view, initialStickyPointOffset: initialStickyPointOffset)
-        if animated {
-            pullUpController.pullUpControllerAnimate(
-                action: .add,
-                withDuration: 0.3,
-                animations: { [weak self] in
-                    self?.view.layoutIfNeeded()
-                },
-                completion: nil)
-        } else {
-            view.layoutIfNeeded()
-        }
+        pullUpController.pullUpControllerAnimate(
+            action: .add,
+            withDuration: animated ? 0.3 : 0,
+            animations: { [weak self] in
+                self?.view.layoutIfNeeded()
+            },
+            completion: nil)
     }
     
     /**
@@ -502,24 +510,17 @@ extension UIViewController {
      */
     open func removePullUpController(_ pullUpController: PullUpController, animated: Bool) {
         pullUpController.hide()
-        if animated {
-            pullUpController.pullUpControllerAnimate(
-                action: .remove,
-                withDuration: 0.3,
-                animations: { [weak self] in
-                    self?.view.layoutIfNeeded()
-                },
-                completion: { _ in
-                    pullUpController.willMove(toParent: nil)
-                    pullUpController.view.removeFromSuperview()
-                    pullUpController.removeFromParent()
+        pullUpController.pullUpControllerAnimate(
+            action: .remove,
+            withDuration: animated ? 0.3 : 0,
+            animations: { [weak self] in
+                self?.view.layoutIfNeeded()
+            },
+            completion: { _ in
+                pullUpController.willMove(toParent: nil)
+                pullUpController.view.removeFromSuperview()
+                pullUpController.removeFromParent()
             })
-        } else {
-            view.layoutIfNeeded()
-            pullUpController.willMove(toParent: nil)
-            pullUpController.view.removeFromSuperview()
-            pullUpController.removeFromParent()
-        }
     }
     
 }
